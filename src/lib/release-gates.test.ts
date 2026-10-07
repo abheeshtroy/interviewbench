@@ -10,6 +10,7 @@ const check = (overrides: Partial<Check> = {}): Check => ({
   fixtureIds: ["fixture"],
   status: "pass",
   isHardGate: true,
+  classification: "deterministic_hard_gate",
   rationale: "",
   evidenceIds: [],
   ...overrides,

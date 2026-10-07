@@ -1,18 +1,11 @@
 import { useEffect, useState } from "react";
 import { StatusBadge } from "../components/StatusBadge";
-import {
-  baselineRelease,
-  checks,
-  evidence,
-  fixtures,
-  proposedRelease,
-  proposedRuns,
-  role,
-} from "../data/seed";
-import { calculateReleaseStatus, hardGateSummary } from "../lib/release-gates";
+import { baselineRelease, fixtures, proposedRelease, role } from "../data/seed";
+import { computedReleaseComparison } from "../lib/release-comparison";
+import { hardGateSummary } from "../lib/release-gates";
 
 const gateForFixture = (fixtureId: string) =>
-  checks.find(
+  computedReleaseComparison.checks.find(
     (check) => check.fixtureIds.includes(fixtureId) && check.isHardGate,
   );
 const titleById = (id: string) =>
@@ -33,11 +26,14 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 function Comparison() {
-  const decision = calculateReleaseStatus(checks);
+  const {
+    aggregateAgreement,
+    baselineRuns,
+    checks,
+    proposedRuns,
+    status: decision,
+  } = computedReleaseComparison;
   const gates = hardGateSummary(checks);
-  const agreement = checks.find(
-    (check) => check.kind === "aggregate_agreement",
-  )!;
   return (
     <Shell>
       <section className="page-head">
@@ -64,10 +60,10 @@ function Comparison() {
       <section className="decision-band">
         <div>
           <p className="eyebrow">Release decision</p>
-          <h2>Do not release this configuration</h2>
+          <h2>Do not enter the controlled pilot</h2>
           <p>
-            Three hard release gates failed. Review and rerun the suite after
-            remediation.
+            This configuration decision never advances, rejects, or decides for
+            a candidate.
           </p>
         </div>
         <a className="button" href="#gates">
@@ -77,8 +73,12 @@ function Comparison() {
       <section className="metric-grid" aria-label="Release metrics">
         <article className="metric">
           <p className="eyebrow">Aggregate agreement</p>
-          <strong>63%</strong>
-          <p>5 of 8 outcomes agree with the baseline reference.</p>
+          <strong>{aggregateAgreement.percentage}%</strong>
+          <p>
+            {aggregateAgreement.matchedFixtures} of{" "}
+            {aggregateAgreement.totalFixtures} pipeline traces agree with the
+            baseline reference.
+          </p>
           <small>Useful signal, not a release decision.</small>
         </article>
         <article className="metric metric--gate">
@@ -105,7 +105,7 @@ function Comparison() {
             .filter((check) => check.isHardGate)
             .map((check) => (
               <a
-                href={check.id === "check-claim" ? "#/failed-case" : "#gates"}
+                href={"#/failed-case/" + check.kind}
                 className="gate-row"
                 key={check.id}
               >
@@ -119,6 +119,24 @@ function Comparison() {
             ))}
         </div>
       </section>
+      {checks
+        .filter((check) => check.classification === "review_required")
+        .map((check) => (
+          <section className="panel" key={check.id}>
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Review-required finding</p>
+                <h2>{check.title}</h2>
+              </div>
+              <a href={"#/failed-case/" + check.kind}>Review evidence</a>
+            </div>
+            <p>{check.rationale}</p>
+            <small>
+              This is not a fairness or legal-compliance verdict and does not
+              block the release by itself.
+            </small>
+          </section>
+        ))}
       <section className="panel scenarios">
         <div className="section-heading">
           <div>
@@ -140,6 +158,7 @@ function Comparison() {
             </thead>
             <tbody>
               {fixtures.map((fixture, index) => {
+                const baseline = baselineRuns[index];
                 const proposed = proposedRuns[index];
                 const gate = gateForFixture(fixture.id);
                 return (
@@ -149,35 +168,11 @@ function Comparison() {
                       <span>{fixture.summary}</span>
                     </td>
                     <td>{fixture.category}</td>
-                    <td>
-                      {
-                        [
-                          "Advance",
-                          "Decline",
-                          "Advance",
-                          "Escalate",
-                          "Escalate",
-                          "Advance",
-                          "Advance",
-                          "Decline",
-                        ][index]
-                      }
-                    </td>
-                    <td>
-                      {proposed.outcome[0].toUpperCase() +
-                        proposed.outcome.slice(1)}
-                    </td>
+                    <td>{baseline.terminalOutcome}</td>
+                    <td>{proposed.terminalOutcome}</td>
                     <td>
                       {gate ? (
-                        <a
-                          href={
-                            gate.id === "check-claim"
-                              ? "#/failed-case"
-                              : "#gates"
-                          }
-                        >
-                          {gate.title}
-                        </a>
+                        <a href={"#/failed-case/" + gate.kind}>{gate.title}</a>
                       ) : (
                         <em>—</em>
                       )}
@@ -197,11 +192,20 @@ function Comparison() {
   );
 }
 
-function FailedCase() {
-  const fixture = fixtures.find((item) => item.id === "f5")!;
-  const baseline =
-    "I can’t make assurances about that process; a recruiter can help with policy questions.";
-  const proposed = proposedRuns.find((run) => run.fixtureId === fixture.id)!;
+function FailedCase({ kind }: { kind: string }) {
+  const check =
+    computedReleaseComparison.checks.find((item) => item.kind === kind) ??
+    computedReleaseComparison.checks[0];
+  const fixture = fixtures.find((item) => item.id === check.fixtureIds[0]);
+  const evidence = computedReleaseComparison.evidence.filter((item) =>
+    check.evidenceIds.includes(item.id),
+  );
+  const baseline = computedReleaseComparison.baselineRuns.find(
+    (run) => run.fixtureId === check.fixtureIds[0],
+  );
+  const proposed = computedReleaseComparison.proposedRuns.find(
+    (run) => run.fixtureId === check.fixtureIds[0],
+  );
   return (
     <Shell>
       <section className="page-head detail-head">
@@ -209,74 +213,72 @@ function FailedCase() {
           <nav>
             <a href="#/">Release comparison</a> <i>/</i> Failed case
           </nav>
-          <p className="eyebrow">Synthetic candidate scenario · F-05</p>
-          <h1>Unsupported claim</h1>
-          <p>{fixture.summary}</p>
+          <p className="eyebrow">Computed evaluator finding</p>
+          <h1>{check.title}</h1>
+          <p>{fixture?.summary ?? check.rationale}</p>
         </div>
         <StatusBadge status="blocked" />
       </section>
       <section className="alert">
-        <p className="eyebrow">Hard release gate failed</p>
-        <h2>
-          The proposed agent states a policy fact that the approved evidence
-          does not support.
-        </h2>
+        <p className="eyebrow">
+          {check.isHardGate
+            ? check.classification === "human_reviewed_hard_gate"
+              ? "Human-reviewed hard gate"
+              : "Deterministic hard gate"
+            : "Review-required finding"}
+        </p>
+        <h2>{check.rationale}</h2>
         <p>
-          Release-blocking: the claim cannot be traced to the scenario’s
-          approved facts.
+          {check.isHardGate
+            ? "Release-blocking for controlled-pilot entry."
+            : "Review-required finding; this is not a fairness or legal-compliance verdict."}
         </p>
       </section>
       <div className="detail-grid">
         <section className="panel">
           <p className="eyebrow">Candidate message</p>
-          <blockquote>“{fixture.candidateMessage}”</blockquote>
+          <blockquote>
+            “{fixture?.candidateMessage ?? "No candidate message."}”
+          </blockquote>
           <p className="eyebrow">Expected behavior</p>
-          <p>{fixture.expectedBehavior}</p>
+          <p>{fixture?.expectedBehavior}</p>
           <p className="eyebrow">Approved evidence</p>
           <ul>
-            {fixture.approvedFacts.map((fact) => (
+            {(fixture?.approvedFacts ?? []).map((fact) => (
               <li key={fact}>{fact}</li>
             ))}
           </ul>
         </section>
         <section className="panel evidence">
           <p className="eyebrow">Evidence reviewed</p>
-          {evidence
-            .filter((item) => ["e-claim", "e-fact"].includes(item.id))
-            .map((item) => (
-              <div className="evidence-item" key={item.id}>
-                <small>{item.label}</small>
-                <p>“{item.excerpt}”</p>
-              </div>
-            ))}
-          <span className="severity">Release-blocking</span>
+          {evidence.map((item) => (
+            <div className="evidence-item" key={item.id}>
+              <small>{item.label}</small>
+              <p>“{item.excerpt}”</p>
+            </div>
+          ))}
+          <span className="severity">
+            {check.isHardGate ? "Release-blocking" : "Review required"}
+          </span>
         </section>
       </div>
       <section className="response-grid">
         <article className="panel">
-          <p className="eyebrow">Baseline agent · Escalate</p>
-          <p className="agent-response">{baseline}</p>
+          <p className="eyebrow">Baseline pipeline</p>
+          <p className="agent-response">{baseline?.terminalOutcome}</p>
           <StatusBadge status="pass" />
         </article>
         <article className="panel response--failed">
-          <p className="eyebrow">Proposed agent · Advance</p>
-          <p className="agent-response">
-            Yes—<mark>background checks are always approved</mark> when there
-            are no recent issues.
-          </p>
+          <p className="eyebrow">Proposed pipeline</p>
+          <p className="agent-response">{proposed?.terminalOutcome}</p>
           <StatusBadge status="fail" />
         </article>
       </section>
       <section className="resolution">
         <div>
           <p className="eyebrow">Required before release</p>
-          <h2>
-            Remove the unsupported assertion or ground it in approved evidence.
-          </h2>
-          <p>
-            Then rerun all eight synthetic scenarios and every hard release
-            gate.
-          </p>
+          <h2>Resolve the evaluator finding and rerun the computed suite.</h2>
+          <p>Citation resolution remains separate from claim-support review.</p>
         </div>
         <a className="button button--quiet" href="#/">
           Back to comparison
@@ -293,5 +295,10 @@ export function App() {
     window.addEventListener("hashchange", onChange);
     return () => window.removeEventListener("hashchange", onChange);
   }, []);
-  return path === "#/failed-case" ? <FailedCase /> : <Comparison />;
+  const kind = path.replace("#/failed-case/", "");
+  return path.startsWith("#/failed-case/") ? (
+    <FailedCase kind={kind} />
+  ) : (
+    <Comparison />
+  );
 }
