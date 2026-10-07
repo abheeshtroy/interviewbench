@@ -76,3 +76,99 @@ export interface ReleaseEvaluation {
   checks: Check[];
   status: ReleaseStatus;
 }
+
+export type InterviewerIntent =
+  | "open_conversation"
+  | "ask_relevant_experience"
+  | "ask_backend_ownership"
+  | "confirm_compensation_question"
+  | "ask_accommodation_details"
+  | "ask_background_check_question"
+  | "ask_role_fit";
+
+export type AnswerCompleteness = "complete" | "incomplete" | "not_applicable";
+
+export interface CandidateIdentity {
+  id: Id;
+  displayName: string;
+  pronouns: string;
+  isSynthetic: true;
+}
+
+export interface CandidateRoleContext {
+  roleId: Id;
+  roleTitle: string;
+  roleLevel: string;
+}
+
+export interface ExpectedEvidenceSpan {
+  id: Id;
+  text: string;
+  label: string;
+}
+
+export interface EscalationCondition {
+  id: Id;
+  trigger: string;
+  requiredAction: "route_to_recruiting" | "avoid_outcome_assurance";
+}
+
+export interface PairedCaseMetadata {
+  pairId: Id;
+  variant: "A" | "B";
+  invariant: string;
+}
+
+export interface CandidateIntentTransition {
+  intent: InterviewerIntent;
+  response: string;
+  nextStateId: Id;
+  expectedEvidenceSpans: ExpectedEvidenceSpan[];
+  answerCompleteness: AnswerCompleteness;
+  escalationConditions: EscalationCondition[];
+}
+
+export interface CandidateConversationState {
+  id: Id;
+  allowedInterviewerIntentTransitions: CandidateIntentTransition[];
+}
+
+export interface CandidateSimulationFixture {
+  id: Id;
+  sourceFixtureId: Id;
+  candidate: CandidateIdentity;
+  roleContext: CandidateRoleContext;
+  initialStateId: Id;
+  conversationStates: CandidateConversationState[];
+  pairedCase?: PairedCaseMetadata;
+}
+
+export interface CandidateSimulatorState {
+  fixtureId: Id;
+  currentStateId: Id;
+  turn: number;
+}
+
+export interface CandidateResponseResult {
+  kind: "response";
+  response: string;
+  expectedEvidenceSpans: ExpectedEvidenceSpan[];
+  escalationConditions: EscalationCondition[];
+  answerCompleteness: AnswerCompleteness;
+  pairedCase?: PairedCaseMetadata;
+}
+
+export interface CandidateFallbackResult {
+  kind: "fallback";
+  reason: "ambiguous_intent" | "unsupported_intent" | "invalid_state";
+  response: string;
+  supportedIntents: InterviewerIntent[];
+}
+
+export type CandidateSimulationResult =
+  CandidateResponseResult | CandidateFallbackResult;
+
+export interface CandidateSimulationStep {
+  result: CandidateSimulationResult;
+  nextState: CandidateSimulatorState;
+}
