@@ -172,3 +172,70 @@ export interface CandidateSimulationStep {
   result: CandidateSimulationResult;
   nextState: CandidateSimulatorState;
 }
+
+export type ScreeningRunState =
+  "queued" | "running" | "completed" | "failed" | "cancelled";
+
+export interface ScreeningRunRequest {
+  id: Id;
+  configurationId: Id;
+  fixtureId: Id;
+  adapterId: Id;
+}
+
+export interface ScreeningRunContext {
+  request: ScreeningRunRequest;
+  fixture: CandidateSimulationFixture;
+  simulatorState: CandidateSimulatorState;
+  turns: ScreeningRunTurn[];
+}
+
+export type ScreeningAgentDecision =
+  | { kind: "intent"; intent: InterviewerIntent | string }
+  | { kind: "complete" }
+  | { kind: "failure"; message: string };
+
+export interface ScreeningAgentAdapter {
+  id: Id;
+  nextIntent(context: ScreeningRunContext): ScreeningAgentDecision;
+}
+
+export interface ScreeningRunTurn {
+  sequence: number;
+  interviewerIntent: string;
+  candidateResponse: string;
+  resultKind: CandidateSimulationResult["kind"];
+  evidenceExcerpts: ExpectedEvidenceSpan[];
+  escalationResults: EscalationCondition[];
+  fallbackReason?: CandidateFallbackResult["reason"];
+}
+
+export type ScreeningRunFailureCode =
+  | "fixture_mismatch"
+  | "adapter_identity_mismatch"
+  | "invalid_interviewer_transition"
+  | "unsupported_intent"
+  | "adapter_failure";
+
+export interface ScreeningRunFailure {
+  code: ScreeningRunFailureCode;
+  message: string;
+  turn: number;
+}
+
+export interface ScreeningRunResult {
+  request: ScreeningRunRequest;
+  configurationId: Id;
+  fixtureId: Id;
+  adapterId: Id;
+  state: ScreeningRunState;
+  stateHistory: ScreeningRunState[];
+  interviewerIntents: string[];
+  candidateResponses: string[];
+  evidenceExcerpts: ExpectedEvidenceSpan[];
+  escalationResults: EscalationCondition[];
+  turns: ScreeningRunTurn[];
+  terminalOutcome: "completed" | "failed" | "cancelled";
+  completionReason?: "adapter_completed" | "conversation_exhausted";
+  failure?: ScreeningRunFailure;
+}
