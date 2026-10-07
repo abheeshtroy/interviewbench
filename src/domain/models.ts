@@ -2,8 +2,14 @@ export type Id = string;
 export type ReleaseStatus = "draft" | "ready" | "blocked";
 export type RunOutcome = "advance" | "decline" | "escalate";
 export type CheckStatus = "pass" | "fail";
+export type ReleaseCheckClassification =
+  | "deterministic_hard_gate"
+  | "human_reviewed_hard_gate"
+  | "review_required"
+  | "informational";
 export type GateKind =
   | "unsupported_claim"
+  | "citation_resolution"
   | "missed_escalation"
   | "paired_consistency"
   | "aggregate_agreement";
@@ -61,6 +67,7 @@ export interface Check {
   fixtureIds: Id[];
   status: CheckStatus;
   isHardGate: boolean;
+  classification: ReleaseCheckClassification;
   rationale: string;
   evidenceIds: Id[];
 }
@@ -190,8 +197,19 @@ export interface ScreeningRunContext {
   turns: ScreeningRunTurn[];
 }
 
+export interface AgentClaim {
+  claim: string;
+  reference: ClaimSupportReference;
+  turn: number;
+}
+
 export type ScreeningAgentDecision =
-  | { kind: "intent"; intent: InterviewerIntent | string }
+  | {
+      kind: "intent";
+      intent: InterviewerIntent | string;
+      escalationResults?: EscalationCondition[];
+      claim?: Omit<AgentClaim, "turn">;
+    }
   | { kind: "complete" }
   | { kind: "failure"; message: string };
 
@@ -207,6 +225,7 @@ export interface ScreeningRunTurn {
   resultKind: CandidateSimulationResult["kind"];
   evidenceExcerpts: ExpectedEvidenceSpan[];
   escalationResults: EscalationCondition[];
+  agentClaims: AgentClaim[];
   fallbackReason?: CandidateFallbackResult["reason"];
 }
 
@@ -234,6 +253,7 @@ export interface ScreeningRunResult {
   candidateResponses: string[];
   evidenceExcerpts: ExpectedEvidenceSpan[];
   escalationResults: EscalationCondition[];
+  agentClaims: AgentClaim[];
   turns: ScreeningRunTurn[];
   terminalOutcome: "completed" | "failed" | "cancelled";
   completionReason?: "adapter_completed" | "conversation_exhausted";
