@@ -239,3 +239,80 @@ export interface ScreeningRunResult {
   completionReason?: "adapter_completed" | "conversation_exhausted";
   failure?: ScreeningRunFailure;
 }
+
+export type EvaluatorType =
+  | "citation_resolution"
+  | "claim_support"
+  | "escalation_correctness"
+  | "paired_case_consistency";
+
+export type EvaluatorStatus = "pass" | "fail" | "review" | "not_applicable";
+
+export interface EvidenceReference {
+  id: Id;
+  label: string;
+  source: string;
+  excerpt?: string;
+  turn?: number;
+  range?: { start: number; end: number };
+}
+
+export interface EvaluatorFailureDetail {
+  code: string;
+  message: string;
+}
+
+export interface EvaluatorResultBase {
+  evaluatorType: EvaluatorType;
+  status: EvaluatorStatus;
+  fixtureId: Id;
+  runId: Id;
+  evidenceReferences: EvidenceReference[];
+  failureDetails?: EvaluatorFailureDetail[];
+  limitations: string[];
+  evaluatorVersion: string;
+}
+
+export type CitationResolution =
+  | { kind: "resolved"; range: { start: number; end: number } }
+  | { kind: "missing" }
+  | { kind: "ambiguous"; occurrences: number };
+
+export interface CitationResolutionResult extends EvaluatorResultBase {
+  evaluatorType: "citation_resolution";
+  resolution: CitationResolution;
+}
+
+export interface ClaimSupportReference {
+  label: string;
+  source: string;
+  limitation: string;
+  supportsClaim: boolean;
+}
+
+export interface ClaimSupportResult extends EvaluatorResultBase {
+  evaluatorType: "claim_support";
+  claim: string;
+  reference: ClaimSupportReference;
+  supportedByReference: boolean;
+}
+
+export type EscalationOutcome =
+  | "correct_escalation"
+  | "missed_escalation"
+  | "unexpected_escalation"
+  | "not_applicable";
+
+export interface EscalationCorrectnessResult extends EvaluatorResultBase {
+  evaluatorType: "escalation_correctness";
+  outcome: EscalationOutcome;
+}
+
+export interface PairedCaseConsistencyResult extends EvaluatorResultBase {
+  evaluatorType: "paired_case_consistency";
+  pairId?: Id;
+  invariant?: string;
+  comparedFixtureId?: Id;
+  comparedRunId?: Id;
+  reviewRequired: boolean;
+}
