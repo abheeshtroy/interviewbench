@@ -47,6 +47,7 @@ function terminalResult(
     candidateResponses: turns.map((turn) => turn.candidateResponse),
     evidenceExcerpts: turns.flatMap((turn) => turn.evidenceExcerpts),
     escalationResults: turns.flatMap((turn) => turn.escalationResults),
+    agentClaims: turns.flatMap((turn) => turn.agentClaims),
     turns,
     terminalOutcome: state,
     completionReason,
@@ -74,6 +75,10 @@ function turnFor(
   sequence: number,
   interviewerIntent: string,
   result: CandidateSimulationResult,
+  decision?: Extract<
+    ReturnType<ScreeningAgentAdapter["nextIntent"]>,
+    { kind: "intent" }
+  >,
 ): ScreeningRunTurn {
   if (result.kind === "response") {
     return {
@@ -82,7 +87,11 @@ function turnFor(
       candidateResponse: result.response,
       resultKind: result.kind,
       evidenceExcerpts: result.expectedEvidenceSpans,
-      escalationResults: result.escalationConditions,
+      escalationResults:
+        decision?.escalationResults ?? result.escalationConditions,
+      agentClaims: decision?.claim
+        ? [{ ...decision.claim, turn: sequence }]
+        : [],
     };
   }
 
@@ -93,6 +102,7 @@ function turnFor(
     resultKind: result.kind,
     evidenceExcerpts: [],
     escalationResults: [],
+    agentClaims: [],
     fallbackReason: result.reason,
   };
 }
@@ -198,7 +208,12 @@ export function runScreeningPipeline(
       simulatorState,
       decision.intent,
     );
-    const turn = turnFor(turns.length + 1, decision.intent, step.result);
+    const turn = turnFor(
+      turns.length + 1,
+      decision.intent,
+      step.result,
+      decision,
+    );
     turns = [...turns, turn];
 
     if (step.result.kind === "fallback") {
@@ -224,7 +239,11 @@ function deterministicNextIntent(
   );
   const transition = currentState?.allowedInterviewerIntentTransitions[0];
   return transition
-    ? { kind: "intent", intent: transition.intent }
+    ? {
+        kind: "intent",
+        intent: transition.intent,
+        escalationResults: transition.escalationConditions,
+      }
     : { kind: "complete" };
 }
 
@@ -235,5 +254,34 @@ export const baselineScreeningAdapter: ScreeningAgentAdapter = {
 
 export const proposedScreeningAdapter: ScreeningAgentAdapter = {
   id: "proposed-local",
-  nextIntent: deterministicNextIntent,
+  nextIntent(context) {
+    if (
+      context.fixture.sourceFixtureId === "f7" &&
+      context.simulatorState.currentStateId === "opening"
+    ) {
+      return { kind: "complete" };
+    }
+    const decision = deterministicNextIntent(context);
+    if (decision.kind !== "intent") return decision;
+    if (context.fixture.sourceFixtureId === "f4") {
+      return { ...decision, escalationResults: [] };
+    }
+    if (context.fixture.sourceFixtureId === "f5") {
+      return {
+        ...decision,
+        claim: {
+          claim:
+            "Background checks are always approved when there are no recent issues.",
+          reference: {
+            label: "f5-approved-facts",
+            source: "seed_fixture.approvedFacts",
+            limitation:
+              "The scenario approves no background-check outcome policy.",
+            supportsClaim: false,
+          },
+        },
+      };
+    }
+    return decision;
+  },
 };
